@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Microsoft Graph throughput demo</title>
+</head>
+
+<body>
+  <canvas id="chart"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/@microsoft/microsoft-graph-client@3.0.5/lib/graph-js-sdk.js"></script>
+  <script>
+    const totalRequestsToRun = 100;
+    let secondsRunning = 0;
+    let running = true;
+    const labels = [];
+    const data = {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Successful requests over time',
+          data: [],
+          fill: false,
+          borderColor: 'rgb(75, 192, 192)',
+          tension: 0.1
+        },
+        {
+          label: 'Total requests over time',
+          data: [],
+          fill: false,
+          borderColor: 'rgb(54, 162, 235)',
+          tension: 0.1
+        }
+      ]
+    };
+    const ctx = document.getElementById('chart');
+
+    const myChart = new Chart(ctx, {
+      type: 'line',
+      data: data,
+      options: {
+        scales: {
+          y: {
+            min: 0,
+            ticks: {
+              stepSize: 1
+            }
+          }
+        },
+        plugins: {
+          title: {
+            display: true
+          }
+        }
+      }
+    });
+
+    function drawChart() {
+      labels.push(++secondsRunning);
+      data.datasets[0].data.push(successfulRequests);
+      data.datasets[1].data.push(totalRequests);
+      // uncomment to show successful requests per second
+      // change the labels title accordingly
+      // successfulRequests = 0;
+      myChart.update();
+    }
+
+    function stop() {
+      clearInterval(chartInterval);
+      running = false;
+    }
+
+    function setChartTitle(title) {
+      myChart.options.plugins.title.text = title;
+      myChart.update();
+    }
+    // #region fetch
+
+    async function fetchCall() {
+      setChartTitle('How fetch handles 429s');
+
+      for (let j = 1; j <= totalRequestsToRun; j++) {
+        if (!running) {
+          break;
+        }
+        totalRequests = j;
+
+        try {
+          let res = await fetch(`https://graph.microsoft.com/v1.0/users/u${j}@contoso.com`);
+          if (res.status !== 429) {
+            successfulRequests++;
+          }
+        }
+        catch (e) {
+          console.log(e);
+        }
+      }
+    }
+
+    async function fetchWithBackOff() {
+      setChartTitle('Handling retry-after with fetch');
+
+      const maxRetries = 5;
+
+      const fetchInternal = async function (url) {
+        let res = await fetch(url);
+
+        if (res.status !== 429 ||
+          currentRetries++ > maxRetries) {
+          return res;
+        }
+
+        const retryAfter = parseInt(res.headers.get('Retry-After'));
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        return await fetchInternal(url);
+      };
+
+      let currentRetries = 0;
+      for (let j = 1; j <= totalRequestsToRun; j++) {
+        if (!running) {
+          break;
+        }
+        totalRequests = j;
+        currentRetries = 1;
+
+        try {
+          let res = await fetchInternal(`https://graph.microsoft.com/v1.0/users/u${j}@contoso.com`);
+          if (res.status !== 429) {
+            successfulRequests++;
+          }
+        }
+        catch (e) {
+          console.log(e);
+        }
+      }
+    }
+
+    async function fetchWithBackOffError() {
+      setChartTitle('Handling retry-after with fetch (error 🫢)');
+
+      const maxRetries = 5;
+
+      const fetchInternal = async function (url) {
+        let res = await fetch(url);
+
+        if (res.status !== 429 ||
+          currentRetries++ > maxRetries) {
+          return res;
+        }
+
+        const retryAfter = Math.floor(Math.random() * 5) + 1;
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        return await fetchInternal(url);
+      };
+
+      let currentRetries = 0;
+      for (let j = 1; j <= totalRequestsToRun; j++) {
+        if (!running) {
+          break;
+        }
+        totalRequests = j;
+        currentRetries = 1;
+
+        try {
+          let res = await fetchInternal(`https://graph.microsoft.com/v1.0/users/u${j}@contoso.com`);
+          if (res.status !== 429) {
+            successfulRequests++;
+          }
+        }
+        catch (e) {
+          console.log(e);
+        }
+      }
+    }
+
+    async function fetchRateLimiting() {
+      setChartTitle('How fetch handles rate limiting');
+
+      for (let j = 1; j <= totalRequestsToRun; j++) {
+        if (!running) {
+          break;
+        }
+        totalRequests = j;
+
+        try {
+          let res = await fetch(`https://graph.microsoft.com/v1.0/drive/${j}`);
+          if (res.status !== 429) {
+            successfulRequests++;
+          }
+        }
+        catch (e) {
+          console.log(e);
+        }
+      }
+    }
+
+    async function fetchRateLimitingWithEvenSpread() {
+      setChartTitle('Handling rate limiting with fetch using even spread');
+
+      const costPerRequest = 1;
+      const rateLimit = 40;
+      const rateReset = 60;
+      const sleepBetweenRequests = totalRequestsToRun > rateLimit ? rateReset / rateLimit : 0;
+
+      for (let j = 1; j <= totalRequestsToRun; j++) {
+        if (!running) {
+          break;
+        }
+        totalRequests = j;
+
+        try {
+          let res = await fetch(`https://graph.microsoft.com/v1.0/drive/${j}`);
+          if (res.status !== 429) {
+            successfulRequests++;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, sleepBetweenRequests * 1000));
+        }
+        catch (e) {
+          console.log(e);
+        }
+      }
+    }
+
+    async function fetchRateLimitingWithBackOffAfterThresholdWithError() {
+      setChartTitle('Handling rate limiting with fetch using backoff after threshold (error 🫢)');
+
+      const costPerRequest = 1;
+
+      for (let j = 1; j <= totalRequestsToRun; j++) {
+        if (!running) {
+          break;
+        }
+        totalRequests = j;
+
+        try {
+          let res = await fetch(`https://graph.microsoft.com/v1.0/drive/${j}`);
+          if (res.status !== 429) {
+            successfulRequests++;
+          }
+          const rateLimitRemaining = res.headers.get('RateLimit-Remaining');
+          if (!rateLimitRemaining) {
+            // no rate limiting yet. continue
+            continue;
+          }
+
+          // how many seconds left to reset
+          const rateLimitReset = parseInt(res.headers.get('RateLimit-Reset')) - 1;
+
+          const requestsToThrottling = rateLimitRemaining / costPerRequest;
+          const requestLeft = totalRequestsToRun - j;
+          if (requestLeft < requestsToThrottling) {
+            // we can make all the requests before throttling
+            continue;
+          }
+
+          const sleepBetweenRequests = rateLimitReset / requestsToThrottling;
+          await new Promise(resolve => setTimeout(resolve, sleepBetweenRequests * 1000));
+        }
+        catch (e) {
+          console.log(e);
+        }
+      }
+    }
+
+    async function fetchRateLimitingWithBackOffAfterThreshold() {
+      setChartTitle('Handling rate limiting with fetch using backoff after threshold');
+
+      const costPerRequest = 1;
+
+      for (let j = 1; j <= totalRequestsToRun; j++) {
+        if (!running) {
+          break;
+        }
+        totalRequests = j;
+
+        try {
+          let res = await fetch(`https://graph.microsoft.com/v1.0/drive/${j}`);
+          if (res.status !== 429) {
+            successfulRequests++;
+          }
+          const rateLimitRemaining = res.headers.get('RateLimit-Remaining');
+          if (!rateLimitRemaining) {
+            // no rate limiting yet. continue
+            continue;
+          }
+
+          // how many seconds left to reset
+          // add 1 second to avoid issuing a request on the reset second which
+          // could lead to throttling
+          const rateLimitReset = parseInt(res.headers.get('RateLimit-Reset')) + 1;
+
+          const requestsToThrottling = rateLimitRemaining / costPerRequest;
+          const requestLeft = totalRequestsToRun - j;
+          if (requestLeft < requestsToThrottling) {
+            // we can make all the requests before throttling
+            continue;
+          }
+
+          const sleepBetweenRequests = rateLimitReset / requestsToThrottling;
+          await new Promise(resolve => setTimeout(resolve, sleepBetweenRequests * 1000));
+        }
+        catch (e) {
+          console.log(e);
+        }
+      }
+    }
+
+    // #endregion
+    // #region sdk
+
+    async function sdkCall() {
+      setChartTitle('How Microsoft Graph JS SDK handles 429s');
+
+      const authProvider = {
+        getAccessToken: async () => 'ABC'
+      };
+      const client = MicrosoftGraph.Client.initWithMiddleware({
+        authProvider
+      });
+      for (let j = 1; j <= totalRequestsToRun; j++) {
+        if (!running) {
+          break;
+        }
+        totalRequests = j;
+
+        try {
+          const res = await client.api(`/users/u${j}@contoso.com`).get();
+          successfulRequests++;
+        }
+        catch (e) {
+          if (e.statusCode !== 429) {
+            successfulRequests++;
+          }
+          console.log(e.statusCode);
+        }
+      }
+    }
+
+    async function sdkRateLimiting() {
+      setChartTitle('How Microsoft Graph JS SDK handles rate limiting');
+      
+      const authProvider = {
+        getAccessToken: async () => 'ABC'
+      };
+      const client = MicrosoftGraph.Client.initWithMiddleware({
+        authProvider
+      });
+      for (let j = 1; j <= totalRequestsToRun; j++) {
+        if (!running) {
+          break;
+        }
+        totalRequests = j;
+
+        try {
+          await client.api(`/drive/${j}`).get();
+          successfulRequests++;
+        }
+        catch (e) {
+          if (e.statusCode !== 429) {
+            successfulRequests++;
+          }
+          console.log(e.statusCode);
+        }
+      }
+    }
+
+    async function sdkRateLimitingWithBackOffAfterThreshold() {
+      setChartTitle('Handling rate limiting with Microsoft Graph JS SDK using backoff after threshold');
+      
+      const costPerRequest = 1;
+
+      const authProvider = {
+        getAccessToken: async () => 'ABC'
+      };
+      const client = MicrosoftGraph.Client.initWithMiddleware({
+        authProvider
+      });
+
+      for (let j = 1; j <= totalRequestsToRun; j++) {
+        if (!running) {
+          break;
+        }
+        totalRequests = j;
+
+        try {
+          const res = await client
+            .api(`/drive/${j}`)
+            .responseType(MicrosoftGraph.ResponseType.RAW)
+            .get();
+          successfulRequests++;
+
+          const rateLimitRemaining = res.headers.get('RateLimit-Remaining');
+          if (!rateLimitRemaining) {
+            // no rate limiting yet. continue
+            continue;
+          }
+
+          // how many seconds left to reset
+          // add 1 second to avoid issuing a request on the reset second which
+          // could lead to throttling
+          const rateLimitReset = parseInt(res.headers.get('RateLimit-Reset')) + 1;
+
+          const requestsToThrottling = rateLimitRemaining / costPerRequest;
+          const requestLeft = totalRequestsToRun - j;
+          if (requestLeft < requestsToThrottling) {
+            // we can make all the requests before throttling
+            continue;
+          }
+
+          const sleepBetweenRequests = rateLimitReset / requestsToThrottling;
+          await new Promise(resolve => setTimeout(resolve, sleepBetweenRequests * 1000));
+        }
+        catch (e) {
+          if (e.statusCode !== 429) {
+            successfulRequests++;
+          }
+          console.log(e.statusCode);
+        }
+      }
+    }
+
+    // #endregion
+
+    let successfulRequests = 0;
+    let totalRequests = 0;
+
+    // msgraph-429.json
+    // fetchCall();
+    // fetchWithBackOffError();
+    // fetchWithBackOff();
+    // sdkCall();
+
+    // msgraph-rate-limiting.json
+    // fetchRateLimiting();
+    // fetchRateLimitingWithBackOffAfterThresholdWithError();
+    // sdkRateLimiting();
+    // fetchRateLimitingWithEvenSpread();
+    // fetchRateLimitingWithBackOffAfterThreshold();
+    // sdkRateLimitingWithBackOffAfterThreshold();
+
+    let chartInterval = setInterval(drawChart, 1000);
+    document.addEventListener('keypress', (event) => {
+      if (event.code === 'Space') {
+        stop();
+      }
+    })
+  </script>
+</body>
+
+</html>
