@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API error handling</title>
+  <style>
+    body,
+    button {
+      font-family: sans-serif;
+      font-size: 5rem;
+    }
+
+    #app {
+      display: grid;
+      place-items: center;
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+
+    #status {
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <div id="status"></div>
+  </div>
+  <script src="https://unpkg.com/@microsoft/microsoft-graph-client@3.0.5/lib/graph-js-sdk.js"></script>
+  <script>
+    function reload() {
+      window.location.reload();
+    }
+
+    // May because it 'may' work but it 'may' also not work 🤷‍♂️
+    async function may() {
+      let res = await fetch(`https://graph.microsoft.com/v1.0/me`);
+      let data = await res.json();
+      document.getElementById('status').innerHTML = `It's working, ${data.givenName.trim()} 😁`;
+    }
+
+    // because sometimes requests take a while to come through
+    async function withAffordance() {
+      document.getElementById('status').innerHTML = "Working on it... 🐌";
+
+      // simulate response delay for the effect
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      let res = await fetch(`https://graph.microsoft.com/v1.0/me`);
+      let data = await res.json();
+      document.getElementById('status').innerHTML = `It's working, ${data.givenName.trim()} 😁`;
+
+      // what if we get an error though?
+    }
+
+    // Pokemon: gotta catch them all (errors)
+    async function pokemon() {
+      let res = await fetch(`https://graph.microsoft.com/v1.0/me`);
+
+      // simulate response delay for the effect
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      if (res.ok) {
+        let data = await res.json();
+        document.getElementById('status').innerHTML = `It's working, ${data.givenName.trim()} 😁`;
+      }
+      else {
+        document.getElementById('status').innerHTML = "An error has occurred 🫠";
+        // we're only missing a 'Try again' 🫠
+        // <br/><button onclick='reload()'>Try again</button>
+      }
+    }
+
+    async function withAffordanceAndErrorHandling() {
+      document.getElementById('status').innerHTML = "Working on it... 🐌";
+
+      // simulate response delay for the effect
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      let res = await fetch(`https://graph.microsoft.com/v1.0/me`);
+      if (res.ok) {
+        let data = await res.json();
+        document.getElementById('status').innerHTML = `It's working, ${data.givenName.trim()} 😁`;
+      }
+      else {
+        document.getElementById('status').innerHTML = "An error has occurred 🫠";
+      }
+    }
+
+    async function sdkCall() {
+      document.getElementById('status').innerHTML = "Working on it... 🐌";
+
+      const authProvider = {
+        getAccessToken: async () => 'ABC'
+      };
+      const client = MicrosoftGraph.Client.initWithMiddleware({
+        authProvider
+      });
+
+      // simulate response delay for the effect
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      try {
+        let res = await client.api(`/me`).get();
+        document.getElementById('status').innerHTML = `It's working, ${res.givenName.trim()} 😁`;
+      }
+      catch {
+        document.getElementById('status').innerHTML = "An error has occurred 🫠";
+      }
+    }
+
+    may();
+    // withAffordance();
+    // pokemon();
+    // withAffordanceAndErrorHandling();
+    // sdkCall();
+  </script>
+</body>
+
+</html>
