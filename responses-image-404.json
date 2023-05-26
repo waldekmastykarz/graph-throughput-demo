@@ -1,0 +1,8 @@
+{
+  "responses": [
+    {
+      "url": "https://graph.microsoft.com/v1.0/users/8*/photo/$value",
+      "responseCode": 404
+    }
+  ]
+}

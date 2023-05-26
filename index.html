@@ -435,6 +435,84 @@
       }
     }
 
+    function rateLimitingMiddleware() {
+      this.nextMiddleware = undefined;
+
+      const getHeaders = (headers) => {
+        const h = {};
+        for (var header of headers.entries()) {
+          h[header[0]] = header[1];
+        }
+        return h;
+      };
+      const costPerRequest = 2;
+
+      return {
+        execute: async (context) => {
+          // execute the request to get response headers
+          await this.nextMiddleware.execute(context);
+
+          const headers = getHeaders(context.response.headers);
+          console.log(headers);
+
+          const rateLimitRemaining = headers['ratelimit-remaining'];
+          if (!rateLimitRemaining) {
+            // no rate limiting yet. continue
+            return;
+          }
+
+          // how many seconds left to reset
+          // add 1 second to avoid issuing a request on the reset second which
+          // could lead to throttling
+          const rateLimitReset = parseInt(headers['ratelimit-reset']) + 1;
+          const requestsToThrottling = rateLimitRemaining / costPerRequest;
+          const sleepBetweenRequests = rateLimitReset / requestsToThrottling;
+
+          console.log(`Sleeping for ${sleepBetweenRequests} seconds...`);
+
+          await new Promise(resolve => setTimeout(resolve, sleepBetweenRequests * 1000));
+        },
+        setNext: (next) => {
+          this.nextMiddleware = next;
+        }
+      }
+    };
+
+    async function sdkRateLimitingWithMiddleware() {
+      setChartTitle('Handling rate limiting with Microsoft Graph JS SDK using rate limiting middleware');
+
+      const costPerRequest = 1;
+
+      const authProvider = {
+        getAccessToken: async () => 'ABC'
+      };
+      const middleware = MicrosoftGraph.MiddlewareFactory.getDefaultMiddlewareChain(authProvider);
+      middleware.unshift(new rateLimitingMiddleware());
+      const client = MicrosoftGraph.Client.initWithMiddleware({
+        middleware
+      });
+
+      for (let j = 1; j <= totalRequestsToRun; j++) {
+        if (!running) {
+          break;
+        }
+        totalRequests = j;
+
+        try {
+          const res = await client
+            .api(`/drive/${j}`)
+            .get();
+          successfulRequests++;
+        }
+        catch (e) {
+          if (e.statusCode !== 429) {
+            successfulRequests++;
+          }
+          console.log(e.statusCode);
+        }
+      }
+    }
+
     // #endregion
 
     let successfulRequests = 0;
@@ -453,6 +531,7 @@
     // fetchRateLimitingWithEvenSpread();
     // fetchRateLimitingWithBackOffAfterThreshold();
     // sdkRateLimitingWithBackOffAfterThreshold();
+    // sdkRateLimitingWithMiddleware();
 
     let chartInterval = setInterval(drawChart, 1000);
     document.addEventListener('keypress', (event) => {

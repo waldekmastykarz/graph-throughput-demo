@@ -70,7 +70,7 @@
         document.getElementById('status').innerHTML = `It's working, ${data.givenName.trim()} 😁`;
       }
       else {
-        document.getElementById('status').innerHTML = "An error has occurred 🫠";
+        document.getElementById('status').innerHTML = "An error has occurred 🫠 <br/><button onclick='reload()'>Try again</button>";
         // we're only missing a 'Try again' 🫠
         // <br/><button onclick='reload()'>Try again</button>
       }
@@ -114,11 +114,11 @@
       }
     }
 
-    may();
+    // may();
     // withAffordance();
     // pokemon();
     // withAffordanceAndErrorHandling();
-    // sdkCall();
+    sdkCall();
   </script>
 </body>
 

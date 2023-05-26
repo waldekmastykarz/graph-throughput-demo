@@ -1,0 +1,39 @@
+{
+  "plugins": [
+    {
+      "name": "MockResponsePlugin",
+      "enabled": true,
+      "pluginPath": "~appFolder\\GraphProxyPlugins\\msgraph-developer-proxy-plugins.dll",
+      "configSection": "mocksPlugin"
+    },
+    {
+      "name": "CachingGuidancePlugin",
+      "enabled": true,
+      "pluginPath": "~appFolder\\GraphProxyPlugins\\msgraph-developer-proxy-plugins.dll",
+      "configSection": "cachingGuidance"
+    }
+  ],
+  "urlsToWatch": [
+    "https://graph.microsoft.com/v1.0/*",
+    "https://graph.microsoft.com/beta/*",
+    "https://graph.microsoft.us/v1.0/*",
+    "https://graph.microsoft.us/beta/*",
+    "https://dod-graph.microsoft.us/v1.0/*",
+    "https://dod-graph.microsoft.us/beta/*",
+    "https://microsoftgraph.chinacloudapi.cn/v1.0/*",
+    "https://microsoftgraph.chinacloudapi.cn/beta/*",
+    "https://*.sharepoint.*/*_api/*",
+    "https://*.sharepoint.*/*_vti_bin/*",
+    "https://*.sharepoint-df.*/*_api/*",
+    "https://*.sharepoint-df.*/*_vti_bin/*"
+  ],
+  "mocksPlugin": {
+    "mocksFile": "responses-image-404.json"
+  },
+  "graphRandomErrorsPlugin": {
+    "allowedErrors": [ 429 ]
+  },
+  "rate": 50,
+  "labelMode": "text",
+  "logLevel": "info"
+}
